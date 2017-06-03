@@ -131,8 +131,6 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
 
         if (count == 0) {
             face_frame = mDetector.FaceDetector(mGray);
-        } else {
-            show_face();
         }
 
         if (mDetector.isFaceDetected()) {
@@ -141,14 +139,18 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
                 mDetector.setFaceDetected(false);
             } else {
                 shoulder_frame = mDetector.ShoulderDetector(mGray);
-                show_face();
                 if (mDetector.isShoulderDetected() &&
-                        (shoulder_frame.x < face_frame.x) && (shoulder_frame.width > face_frame.width)) {
-                    width = (shoulder_frame.width - face_frame.width) / 2;
-                    show_shoulder();
+                        (shoulder_frame.x < face_frame.x) && ((shoulder_frame.x +
+                        shoulder_frame.width) > (face_frame.x + face_frame.width))) {
+                    this.width = (shoulder_frame.width - face_frame.width) / 2;
                 }
             }
 
+        }
+
+        if (mDetector.isFaceDetected()) {
+            show_face();
+            show_shoulder();
         }
 
         return mRgba;
