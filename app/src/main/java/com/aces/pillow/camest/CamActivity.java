@@ -28,11 +28,14 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
 
     private static final int      thickness = 2;
 
-    private static final int       MAXIMUM_ALLOWED_SKIPPED_FRAMES = 15;
+    private static final int      MAXIMUM_ALLOWED_SKIPPED_FRAMES = 15;
 
-    private int                      count = 0;
+    private static final int      MAXIMUM_ALLOWED_UNDETECTED_FRAMES = 30;
 
-    private double                   width = 0;
+    private int                    shoulder_frame_count = 0;
+    private int                    face_frame_count = 0;
+
+    private double                width = 0;
 
     private CameraBridgeViewBase   mOpenCvCameraView;
 
@@ -129,20 +132,28 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
         mRgba = inputFrame.rgba();
         mGray = inputFrame.gray();
 
-        if (count == 0) {
+        if (face_frame_count == 0) {
             face_frame = mDetector.FaceDetector(mGray);
         }
 
         if (mDetector.isFaceDetected()) {
-            if (count > MAXIMUM_ALLOWED_SKIPPED_FRAMES) {
-                count = 0;
+            if (face_frame_count > MAXIMUM_ALLOWED_SKIPPED_FRAMES) {
+                face_frame_count = 0;
+                face_frame = null;
                 mDetector.setFaceDetected(false);
             } else {
-                shoulder_frame = mDetector.ShoulderDetector(mGray);
-                if (mDetector.isShoulderDetected() &&
-                        (shoulder_frame.x < face_frame.x) && ((shoulder_frame.x +
-                        shoulder_frame.width) > (face_frame.x + face_frame.width))) {
-                    this.width = (shoulder_frame.width - face_frame.width) / 2;
+                if (!mDetector.isShoulderDetected()) {
+                    shoulder_frame = mDetector.ShoulderDetector(mGray);
+                    if (mDetector.isShoulderDetected() &&
+                            (shoulder_frame.width > face_frame.width) && (shoulder_frame.height
+                            > face_frame.height)) {
+                        this.width = (shoulder_frame.width - face_frame.width) / 2;
+                        shoulder_frame_count = 1;
+                    }
+                    else {
+                        mDetector.setShoulderDetected(false);
+                        shoulder_frame = null;
+                    }
                 }
             }
 
@@ -150,7 +161,15 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
 
         if (mDetector.isFaceDetected()) {
             show_face();
-            show_shoulder();
+            face_frame_count++;
+            if (mDetector.isShoulderDetected()) {
+                shoulder_frame_count++;
+                if (shoulder_frame_count > MAXIMUM_ALLOWED_SKIPPED_FRAMES) {
+                    mDetector.setShoulderDetected(false);
+                    shoulder_frame = null;
+                    shoulder_frame_count = 0;
+                } else show_shoulder();
+            }
         }
 
         return mRgba;
@@ -163,7 +182,6 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
     private void show_face() {
         if (face_frame != null) {
             Imgproc.rectangle(mRgba, face_frame.tl(), face_frame.br(), FACE_RECT_COLOR, thickness);
-            count++;
         }
     }
 

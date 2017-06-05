@@ -98,7 +98,7 @@ public class Detector {
             // load cascade file from application resources
             InputStream isShoulder = context.getResources().openRawResource(R.raw.haarcascade_mcs_upperbody);
             File cascadeDirShoulder = context.getDir("cascadeShoulder", Context.MODE_PRIVATE);
-            mCascadeFileShoulder = new File(cascadeDirShoulder, "haarcascade_mcs_upperbodyy.xml");
+            mCascadeFileShoulder = new File(cascadeDirShoulder, "haarcascade_mcs_upperbody.xml");
             FileOutputStream osShoulder = new FileOutputStream(mCascadeFileShoulder);
 
             byte[] bufferShoulder = new byte[4096];
