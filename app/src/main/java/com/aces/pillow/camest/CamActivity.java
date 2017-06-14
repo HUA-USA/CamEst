@@ -7,6 +7,7 @@ import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
 import org.opencv.android.LoaderCallbackInterface;
 
 import org.opencv.android.OpenCVLoader;
+import org.opencv.core.Point;
 import org.opencv.core.Rect;
 
 import org.opencv.core.Mat;
@@ -28,9 +29,9 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
 
     private static final int      thickness = 2;
 
-    private static final int      MAXIMUM_ALLOWED_SKIPPED_FRAMES = 15;
+    private static final int      MAXIMUM_ALLOWED_SKIPPED_FRAMES = 5;
 
-    private static final int      MAXIMUM_ALLOWED_UNDETECTED_FRAMES = 30;
+    private static final int      MAXIMUM_ALLOWED_UNDETECTED_FRAMES = 10;
 
     private int                    shoulder_frame_count = 0;
     private int                    face_frame_count = 0;
@@ -46,6 +47,12 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
 
     private Rect                   face_frame;
     private Rect                   shoulder_frame;
+
+    private Rect                   pre_face_frame;
+    private Rect                   pre_shoulder_frame;
+
+    private Kalman                 FaceKalman;
+    private Kalman                 ShoulderKalman;
 
     private BaseLoaderCallback  mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -82,6 +89,9 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
         setContentView(R.layout.activity_cam);
 
         mDetector = new Detector(this);
+
+        mDetector.setFaceDetected(false);
+        mDetector.setShoulderDetected(false);
 
         mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.cam_activity_surface_view);
         mOpenCvCameraView.setVisibility(CameraBridgeViewBase.VISIBLE);
@@ -132,43 +142,72 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
         mRgba = inputFrame.rgba();
         mGray = inputFrame.gray();
 
-        if (face_frame_count == 0) {
+        if (!mDetector.isFaceDetected()) {
             face_frame = mDetector.FaceDetector(mGray);
-        }
-
-        if (mDetector.isFaceDetected()) {
-            if (face_frame_count > MAXIMUM_ALLOWED_SKIPPED_FRAMES) {
-                face_frame_count = 0;
-                face_frame = null;
-                mDetector.setFaceDetected(false);
-            } else {
+            if (face_frame != null) {
+                pre_face_frame = face_frame.clone();
+                FaceKalman = new Kalman(new Point(face_frame.x + face_frame.width * 0.5,
+                        face_frame.y + face_frame.height * 0.5));
+            }
+        } else {
+            if (face_frame_count <= MAXIMUM_ALLOWED_SKIPPED_FRAMES) {
                 if (!mDetector.isShoulderDetected()) {
                     shoulder_frame = mDetector.ShoulderDetector(mGray);
-                    if (mDetector.isShoulderDetected() &&
-                            (shoulder_frame.width > face_frame.width) && (shoulder_frame.height
-                            > face_frame.height)) {
-                        this.width = (shoulder_frame.width - face_frame.width) / 2;
-                        shoulder_frame_count = 1;
-                    }
-                    else {
-                        mDetector.setShoulderDetected(false);
-                        shoulder_frame = null;
+                    if (shoulder_frame != null) {
+                        pre_shoulder_frame = shoulder_frame.clone();
                     }
                 }
+            } else if (face_frame_count > MAXIMUM_ALLOWED_SKIPPED_FRAMES
+                    && face_frame_count <= MAXIMUM_ALLOWED_UNDETECTED_FRAMES) {
+                face_frame = mDetector.FaceDetector(mGray);
             }
-
         }
 
+        Point c, P1, P2;
         if (mDetector.isFaceDetected()) {
-            show_face();
-            face_frame_count++;
-            if (mDetector.isShoulderDetected()) {
-                shoulder_frame_count++;
-                if (shoulder_frame_count > MAXIMUM_ALLOWED_SKIPPED_FRAMES) {
-                    mDetector.setShoulderDetected(false);
-                    shoulder_frame = null;
-                    shoulder_frame_count = 0;
-                } else show_shoulder();
+            if (face_frame_count == 0) {
+                show_face();
+                face_frame_count++;
+            } else if (face_frame_count > 0 && face_frame_count <= MAXIMUM_ALLOWED_SKIPPED_FRAMES) {
+                c = FaceKalman.getPrediction();
+                P1 = new Point(c.x - face_frame.width / 2, c.y - face_frame.height / 2);
+                P2 = new Point(c.x + face_frame.width / 2, c.y + face_frame.height / 2);
+                Imgproc.rectangle(mRgba, P1, P2, FACE_RECT_COLOR, thickness);
+                face_frame_count++;
+            } else if (face_frame_count > MAXIMUM_ALLOWED_SKIPPED_FRAMES
+                    && face_frame_count <= MAXIMUM_ALLOWED_UNDETECTED_FRAMES) {
+                if (face_frame == null) {
+                    face_frame = pre_face_frame.clone();
+                    c = FaceKalman.getPrediction();
+                    P1 = new Point(c.x - face_frame.width / 2, c.y - face_frame.height / 2);
+                    P2 = new Point(c.x + face_frame.width / 2, c.y + face_frame.height / 2);
+                    Imgproc.rectangle(mRgba, P1, P2, FACE_RECT_COLOR, thickness);
+                    face_frame_count++;
+                } else {
+                    face_frame_count = 1;
+                    pre_face_frame = face_frame.clone();
+                    c = new Point((face_frame.tl().x + face_frame.br().x) / 2,
+                            (face_frame.tl().y + face_frame.br().y) / 2 );
+                    FaceKalman.correction(c);
+                    show_face();
+                }
+            } else if (face_frame_count > MAXIMUM_ALLOWED_UNDETECTED_FRAMES) {
+                face_frame_count = 0;
+                mDetector.setFaceDetected(false);
+                face_frame = null;
+                pre_face_frame = null;
+                FaceKalman = null;
+            }
+        }
+
+        if (mDetector.isShoulderDetected()) {
+            show_shoulder();
+            shoulder_frame_count++;
+            if (shoulder_frame_count > MAXIMUM_ALLOWED_UNDETECTED_FRAMES) {
+                shoulder_frame_count = 0;
+                mDetector.setShoulderDetected(false);
+                shoulder_frame = null;
+                pre_shoulder_frame = null;
             }
         }
 
