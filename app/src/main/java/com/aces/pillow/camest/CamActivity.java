@@ -29,9 +29,9 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
 
     private static final int      thickness = 2;
 
-    private static final int      MAXIMUM_ALLOWED_SKIPPED_FRAMES = 5;
+    private static final int      MAXIMUM_ALLOWED_SKIPPED_FRAMES = 4;
 
-    private static final int      MAXIMUM_ALLOWED_UNDETECTED_FRAMES = 10;
+    private static final int      MAXIMUM_ALLOWED_UNDETECTED_FRAMES = 8;
 
     private int                    shoulder_frame_count = 0;
     private int                    face_frame_count = 0;
@@ -201,8 +201,19 @@ public class CamActivity extends Activity implements CvCameraViewListener2 {
         }
 
         if (mDetector.isShoulderDetected()) {
-            show_shoulder();
             shoulder_frame_count++;
+            if (mDetector.isFaceDetected() && (shoulder_frame.width > face_frame.width * 1.4)
+                                && (shoulder_frame.x < face_frame.x)
+                                && (shoulder_frame.x + shoulder_frame.width > face_frame.x + face_frame.width)
+                    )
+            {
+                this.width = (shoulder_frame.width - face_frame.width) / 2.0;
+                this.width = this.width * 64.0 / mDetector.getEyeDistance();
+                Log.i(TAG, "Shoulder Width Detected " + this.width);
+                Imgproc.putText(mRgba, "width = " + this.width, new Point(shoulder_frame.tl().x, shoulder_frame.br().y),
+                        3, 1, new Scalar(255, 0, 0, 255), 1);
+                show_shoulder();
+            }
             if (shoulder_frame_count > MAXIMUM_ALLOWED_UNDETECTED_FRAMES) {
                 shoulder_frame_count = 0;
                 mDetector.setShoulderDetected(false);

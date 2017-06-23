@@ -42,6 +42,7 @@ public class Detector {
 
     private float                  mRelativeFaceSize   = 0.2f;
     private int                    mAbsoluteFaceSize   = 0;
+    private double                 mEyeDistance;
 
     private boolean               FaceDetected = false;
     private boolean               ShoulderDetected = false;
@@ -142,6 +143,8 @@ public class Detector {
 
     public void setShoulderDetected(boolean b) {ShoulderDetected = b;}
 
+    public double getEyeDistance() { return mEyeDistance; }
+
     public Rect FaceDetector (Mat gray) {
 
         MatOfRect faces = new MatOfRect();
@@ -173,9 +176,16 @@ public class Detector {
                 mJavaDetectorEye.detectMultiScale(mFace, eyes, 1.1, 2,
                         Objdetect.CASCADE_SCALE_IMAGE, new Size(0, 0), new Size());
                 if (!eyes.empty()) {
-                    FaceDetected = true;
-                    // Face_skip_frame = 1;
-                    return facesArray[i];
+                    Rect[] eyeArray = eyes.toArray();
+                    if (eyeArray.length == 2) {
+                        FaceDetected = true;
+                        Point p0 = new Point((eyeArray[0].br().x + eyeArray[0].tl().x) / 2,
+                                (eyeArray[0].br().y + eyeArray[0].tl().y) / 2);
+                        Point p1 = new Point((eyeArray[1].br().x + eyeArray[1].tl().x) / 2,
+                                (eyeArray[1].br().y + eyeArray[1].tl().y) / 2);
+                        mEyeDistance = Math.sqrt((double) ((p1.x - p0.x) * (p1.x - p0.x) + (p1.y - p0.y) * (p1.y - p0.y)));
+                        return facesArray[i];
+                    }
                 }
             }
         }
@@ -217,6 +227,22 @@ public class Detector {
             ShoulderDetected = true;
             return shouldersArray[max_idx];
         }
+
+//        if (!shoulders.empty()) {
+//            Rect[] shouldersArray = shoulders.toArray();
+//            for (int i = 1; i < shouldersArray.length; i++) {
+//
+//                Mat mShoulder = gray.submat(shouldersArray[i]);
+//                if (mJavaDetectorEye != null) {
+//                    mJavaDetectorEye.detectMultiScale(mShoulder, eyes, 1.1, 2,
+//                            Objdetect.CASCADE_SCALE_IMAGE, new Size(0, 0), new Size());
+//                    if (!eyes.empty()) {
+//                        ShoulderDetected = true;
+//                        return shouldersArray[i];
+//                    }
+//                }
+//            }
+//        }
 
         return null;
     }
